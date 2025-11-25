@@ -16,7 +16,7 @@
         :root {
             --bg-primary: #0a0e27;
             --bg-secondary: #141932;
-            --bg-tertiary: #1e2540;
+            --bg-tertiary: #0d101b;
             --text-primary: #e4e7f0;
             --text-secondary: #9ca3af;
             --accent-bullish: #10b981;
@@ -1040,6 +1040,20 @@
     </div>
 
     <div class="chatbot-container" id="chatbotContainer">
+        <div class="chatbot-header">
+            <div class="chatbot-title">Financial Assistant</div>
+            <span class="chatbot-close" id="chatbotClose">×</span>
+        </div>
+        <div class="chatbot-messages" id="chatbotMessages">
+            <div class="chat-message">
+                <div class="message-avatar bot-avatar">🤖</div>
+                <div class="message-content">Hello! How can I assist you with your market analysis today?</div>
+            </div>
+        </div>
+        <div class="chatbot-input-area">
+            <input type="text" class="chatbot-input" id="chatbotInput" placeholder="Type a message...">
+            <button class="chatbot-send" id="chatbotSend">Send</button>
+        </div>
     </div>
 
     <div class="modal-overlay" id="addStockModal">
@@ -1142,40 +1156,52 @@
                 }
             });
 
-            // --- Load stock data ---
-            function loadStock(symbol) {
-                // Default to AAPL if the symbol doesn't exist for some reason
-                if (!stockData[symbol]) {
-                    symbol = 'AAPL';
-                }
+            // Variable to hold the timer so we can restart it when switching stocks
+            let updateTimer = null;
 
-                const stock = stockData[symbol];
-                if (!stock) return;
+            async function loadStock(symbol) {
+                // 1. Clear any existing timer so we don't have multiple timers running
+                if (updateTimer) clearInterval(updateTimer);
 
-                const isPositive = stock.change > 0;
-                document.querySelector('.stock-symbol').textContent = symbol;
-                document.querySelector('.stock-price').textContent = `$${stock.price.toFixed(2)}`;
-                document.querySelector('.stock-change').textContent =
-                    `${isPositive ? '+' : ''}${stock.change.toFixed(2)} (${isPositive ? '+' : ''}${stock.changePercent.toFixed(2)}%)`;
+                // 2. Define the update function
+                const fetchPrice = async () => {
+                    try {
+                        const response = await fetch('http://127.0.0.1:5000/get_stock', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ symbol: symbol })
+                        });
 
-                const changeEl = document.querySelector('.stock-change');
-                const priceEl = document.querySelector('.stock-price');
+                        const data = await response.json();
+                        if (data.error) return;
 
-                changeEl.style.background = isPositive ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-                changeEl.style.color = isPositive ? 'var(--accent-bullish)' : 'var(--accent-bearish)';
-                priceEl.style.color = isPositive ? 'var(--accent-bullish)' : 'var(--accent-bearish)';
+                        // Update the text on screen
+                        document.querySelector('.stock-symbol').textContent = data.symbol;
+                        document.querySelector('.stock-price').textContent = `$${data.price.toFixed(2)}`;
 
-                // Update chart (demo data)
-                // In a real app, you'd fetch new chart data here
-                const newData = Array.from({ length: 7 }, () => stock.price * (1 + (Math.random() - 0.5) * 0.1));
-                newData[6] = stock.price; // Ensure last point is the current price
-                priceChart.data.datasets[0].data = newData;
-                priceChart.data.datasets[0].borderColor = isPositive ? 'var(--accent-bullish)' : 'var(--accent-bearish)';
-                priceChart.data.datasets[0].backgroundColor = isPositive ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-                priceChart.update();
+                        const isPositive = data.change >= 0;
+                        const sign = isPositive ? '+' : '';
+                        document.querySelector('.stock-change').textContent =
+                            `${sign}${data.change.toFixed(2)} (${sign}${data.changePercent.toFixed(2)}%)`;
+
+                        // (Optional) Flash the price to show it updated
+                        const priceEl = document.querySelector('.stock-price');
+                        priceEl.style.opacity = '0.5';
+                        setTimeout(() => priceEl.style.opacity = '1', 200);
+
+                    } catch (error) {
+                        console.error("Auto-update failed", error);
+                    }
+                };
+
+                // 3. Call it immediately for the first time
+                await fetchPrice();
+
+                // 4. Set it to run every 15 seconds (15000 milliseconds)
+                // WARNING: Do not set this lower than 5000 (5 seconds) or Yahoo will block you.
+                updateTimer = setInterval(fetchPrice, 15000);
             }
 
-            // Timeframe buttons
             document.querySelectorAll('.timeframe-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('active'));
@@ -1500,3 +1526,4 @@
 </body>
 
 </html>
+
